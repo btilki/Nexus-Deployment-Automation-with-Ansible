@@ -1,3 +1,4 @@
+#These codes are for manual installation of Nexus to help create the deploy-nexus.YAML file.
 apt-get update
 apt install openjdk-8-jre-headless
 apt install net-tools
