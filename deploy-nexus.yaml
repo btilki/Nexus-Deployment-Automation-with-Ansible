@@ -4,58 +4,60 @@
   tasks:
     - name: Update apt repo and cache
       apt: update_cache=yes force_apt_get=yes cache_valid_time=3600
+      # equivalent to apt-get update, Forces Ansible to use the apt-get command instead of Python's apt module
+      # Only updates the cache if it’s older than 3600 seconds (1 hour)
     - name: Install Java 8
       apt: name=openjdk-8-jre-headless
-    - name: Install net-tools
+    - name: Install net-tools # For network troubleshooting
       apt: name=net-tools
 
 - name: Download and unpack Nexus installer
   hosts: nexus_server
   tasks:
-    - name: Check nexus folder stats
+    - name: Check nexus folder stats # Check if Nexus is already installed
       stat:
         path: /opt/nexus
       register: stat_result
-    - name: Download Nexus
+    - name: Download Nexus # Fetch latest Nexus build
       get_url:
         url: https://download.sonatype.com/nexus/3/latest-unix.tar.gz
         dest: /opt/
       register: download_result
-    - name: Untar Nexus installer
+    - name: Untar Nexus installer # Extract only if not installed
       unarchive:
         src: "{{download_result.dest}}"
         dest: /opt/
         remote_src: yes
       when: not stat_result.stat.exists
-    - name: Find nexus folder
+    - name: Find nexus folder # Locate extracted directory
       find: 
         paths: /opt
         pattern: "nexus-*"
         file_type: directory
       register: find_result
-    - name: Rename nexus folder
+    - name: Rename nexus folder # Standardize path
       shell: mv {{find_result.files[0].path}} /opt/nexus
       when: not stat_result.stat.exists
 
-- name: Create nexus user to own nexus folder
+- name: Create nexus user to own nexus folder # Set ownership for security
   hosts: nexus_server
   tasks:
     - name: Ensure group nexus exists
       group:
         name: nexus
         state: present
-    - name: Create nexus user 
+    - name: Create nexus user # Dedicated service user 
       user:
         name: nexus
         group: nexus
-    - name: Make nexus user owner of nexus folder
+    - name: Make nexus user owner of nexus folder # Proper permissions
       file:
         path: /opt/nexus
         state: directory
         owner: nexus
         group: nexus
         recurse: yes
-    - name: Make nexus user owner of sonatype-work folder
+    - name: Make nexus user owner of sonatype-work folder # This permission is required for data access 
       file:
         path: /opt/sonatype-work
         state: directory
@@ -63,12 +65,12 @@
         group: nexus
         recurse: yes
 
-- name: Start nexus with nexus user
+- name: Start nexus with nexus user # Run Nexus as service user
   hosts: nexus_server
   become: True
   become_user: nexus
   tasks:
-    - name: Set run_as_user nexus
+    - name: Set run_as_user nexus # Ensure startup uses correct user
       lineinfile: 
         path: /opt/nexus/bin/nexus.rc
         regexp: '^#run_as_user=""'
@@ -79,14 +81,14 @@
 - name: Verify nexus running
   hosts: nexus_server
   tasks:
-    - name: Check with ps
+    - name: Check with ps # Process check
       shell: ps aux | grep nexus
       register: app_status
     - debug: msg={{app_status.stdout_lines}}
-    - name: Wait one minute
+    - name: Wait one minute # Wait one minute service to startup
       pause:
         minutes: 1 
-    - name: Check with netstat
+    - name: Check with netstat # Confirm listening ports
       shell: netstat -plnt
       register: app_status
     - debug: msg={{app_status.stdout_lines}}
